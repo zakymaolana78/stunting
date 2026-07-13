@@ -6,9 +6,15 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import matplotlib.pyplot as plt
 from pathlib import Path
+
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score
+)
 
 # ==========================================================
 # KONFIGURASI HALAMAN
@@ -21,28 +27,17 @@ st.set_page_config(
 )
 
 # ==========================================================
-# LOKASI FILE
+# LOAD DATASET
 # ==========================================================
 
 BASE_DIR = Path(__file__).parent
 
-# ==========================================================
-# MEMBACA DATA
-# ==========================================================
-
-dataset = pd.read_csv(BASE_DIR / "dataset_final_stunting.csv")
-evaluasi = pd.read_csv(BASE_DIR / "hasil_evaluasi.csv")
-hasil = pd.read_csv(BASE_DIR / "hasil_prediksi_rf.csv")
-importance = pd.read_csv(BASE_DIR / "feature_importance.csv")
-
-# Jika file tidak ada, aplikasi tetap berjalan
-try:
-    best_parameter = pd.read_csv(BASE_DIR / "best_parameter_rf.csv")
-except:
-    best_parameter = None
+dataset = pd.read_csv(
+    BASE_DIR / "dataset_final_stunting.csv"
+)
 
 # ==========================================================
-# MEMBANGUN MODEL RANDOM FOREST
+# FITUR DAN TARGET
 # ==========================================================
 
 fitur = [
@@ -57,12 +52,69 @@ target = "jumlah_balita_stunting"
 X = dataset[fitur]
 y = dataset[target]
 
+# ==========================================================
+# SPLIT DATA
+# ==========================================================
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42
+)
+
+# ==========================================================
+# RANDOM FOREST
+# ==========================================================
+
 model = RandomForestRegressor(
     n_estimators=100,
     random_state=42
 )
 
-model.fit(X, y)
+model.fit(
+    X_train,
+    y_train
+)
+
+# ==========================================================
+# HASIL PREDIKSI
+# ==========================================================
+
+y_pred = model.predict(X_test)
+
+# ==========================================================
+# EVALUASI
+# ==========================================================
+
+mae = mean_absolute_error(
+    y_test,
+    y_pred
+)
+
+mse = mean_squared_error(
+    y_test,
+    y_pred
+)
+
+rmse = np.sqrt(mse)
+
+r2 = r2_score(
+    y_test,
+    y_pred
+)
+
+# ==========================================================
+# FEATURE IMPORTANCE
+# ==========================================================
+
+importance = pd.DataFrame({
+    "Fitur": fitur,
+    "Importance": model.feature_importances_
+}).sort_values(
+    by="Importance",
+    ascending=False
+)
 
 # ==========================================================
 # SIDEBAR
@@ -71,12 +123,12 @@ model.fit(X, y)
 st.sidebar.title("📋 Menu")
 
 menu = st.sidebar.radio(
-    "Pilih Menu",
+    "Pilih Halaman",
     [
         "🏠 Beranda",
         "📊 Dataset",
         "🤖 Prediksi",
-        "📉 Evaluasi",
+        "📈 Evaluasi",
         "⭐ Feature Importance",
         "ℹ️ Tentang"
     ]
@@ -87,18 +139,17 @@ menu = st.sidebar.radio(
 
 if menu == "🏠 Beranda":
 
-    st.title("📊 Prediksi Jumlah Balita Stunting di Provinsi Jawa Barat")
+    st.title("📊 Prediksi Jumlah Balita Stunting Provinsi Jawa Barat")
 
-    st.markdown(
-        """
-        Aplikasi ini digunakan untuk memprediksi jumlah balita stunting
-        di Provinsi Jawa Barat menggunakan algoritma **Random Forest Regressor**.
-        """
-    )
+    st.write("""
+    Aplikasi ini dibuat untuk memprediksi jumlah balita stunting
+    di Provinsi Jawa Barat menggunakan algoritma
+    **Random Forest Regressor**.
+    """)
 
     st.divider()
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.metric(
@@ -108,14 +159,20 @@ if menu == "🏠 Beranda":
 
     with col2:
         st.metric(
-            "Jumlah Variabel",
-            len(dataset.columns)
+            "Jumlah Fitur",
+            len(fitur)
         )
 
     with col3:
         st.metric(
             "Algoritma",
             "Random Forest"
+        )
+
+    with col4:
+        st.metric(
+            "R² Score",
+            f"{r2:.3f}"
         )
 
     st.divider()
@@ -151,7 +208,19 @@ if menu == "🏠 Beranda":
         fig,
         use_container_width=True
     )
-  # ==========================================================
+
+    st.divider()
+
+    st.subheader("Lima Data Pertama")
+
+    st.table(
+        dataset.head()
+    )
+
+    st.info(
+        "Silakan pilih menu di sebelah kiri untuk melihat Dataset, Prediksi, Evaluasi, dan Feature Importance."
+    )
+    # ==========================================================
 # DATASET
 # ==========================================================
 
@@ -160,8 +229,10 @@ elif menu == "📊 Dataset":
     st.title("📊 Dataset Penelitian")
 
     st.write(
-        "Dataset yang digunakan dalam penelitian prediksi jumlah balita stunting di Provinsi Jawa Barat."
+        "Dataset yang digunakan untuk membangun model Random Forest Regressor."
     )
+
+    st.divider()
 
     st.subheader("Dataset")
 
@@ -191,13 +262,13 @@ elif menu == "📊 Dataset":
     with col2:
 
         st.metric(
-            "Jumlah Missing Value",
-            dataset.isnull().sum().sum()
+            "Jumlah Fitur",
+            len(fitur)
         )
 
         st.metric(
-            "Jumlah Fitur",
-            len(fitur)
+            "Target",
+            target
         )
 
     st.divider()
@@ -206,6 +277,22 @@ elif menu == "📊 Dataset":
 
     st.dataframe(
         dataset.describe(),
+        use_container_width=True
+    )
+
+    st.divider()
+
+    st.subheader("Missing Value")
+
+    missing = pd.DataFrame({
+
+        "Kolom": dataset.columns,
+        "Jumlah Missing": dataset.isnull().sum().values
+
+    })
+
+    st.dataframe(
+        missing,
         use_container_width=True
     )
 
@@ -227,37 +314,48 @@ elif menu == "📊 Dataset":
 
     st.divider()
 
-    st.subheader("Hubungan Persentase Penduduk Miskin dengan Jumlah Balita Stunting")
+    st.subheader("Hubungan Kemiskinan dengan Stunting")
 
-    fig2 = px.scatter(
+    fig = px.scatter(
         dataset,
         x="persentase_penduduk_miskin",
         y="jumlah_balita_stunting",
-        color="jumlah_balita_stunting",
-        title="Scatter Plot"
+        title="Persentase Penduduk Miskin vs Jumlah Balita Stunting"
     )
 
     st.plotly_chart(
-        fig2,
+        fig,
         use_container_width=True
     )
 
     st.divider()
 
-    st.subheader("Hubungan Sanitasi Layak dengan Jumlah Balita Stunting")
+    st.subheader("Hubungan Sanitasi Layak dengan Stunting")
 
-    fig3 = px.scatter(
+    fig = px.scatter(
         dataset,
         x="persentase_sanitasi_layak",
         y="jumlah_balita_stunting",
-        color="jumlah_balita_stunting"
+        title="Persentase Sanitasi Layak vs Jumlah Balita Stunting"
     )
 
     st.plotly_chart(
-        fig3,
+        fig,
         use_container_width=True
     )
-  # ==========================================================
+
+    st.divider()
+
+    csv = dataset.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        label="⬇ Download Dataset",
+        data=csv,
+        file_name="dataset_final_stunting.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+    # ==========================================================
 # PREDIKSI
 # ==========================================================
 
@@ -266,159 +364,181 @@ elif menu == "🤖 Prediksi":
     st.title("🤖 Prediksi Jumlah Balita Stunting")
 
     st.write(
-        "Masukkan nilai setiap variabel untuk melakukan prediksi menggunakan algoritma Random Forest."
+        "Masukkan nilai setiap variabel untuk memperoleh prediksi jumlah balita stunting."
     )
+
+    st.divider()
 
     col1, col2 = st.columns(2)
 
     with col1:
 
-        miskin = st.number_input(
+        persentase_penduduk_miskin = st.number_input(
             "Persentase Penduduk Miskin",
             min_value=0.0,
-            max_value=100.0,
-            value=7.5,
-            step=0.1
+            value=float(dataset["persentase_penduduk_miskin"].mean())
         )
 
-        garis = st.number_input(
+        garis_kemiskinan = st.number_input(
             "Garis Kemiskinan",
             min_value=0.0,
-            value=450000.0,
-            step=1000.0
+            value=float(dataset["garis_kemiskinan"].mean())
         )
 
     with col2:
 
-        sanitasi = st.number_input(
+        persentase_sanitasi_layak = st.number_input(
             "Persentase Sanitasi Layak",
             min_value=0.0,
-            max_value=100.0,
-            value=90.0,
-            step=0.1
+            value=float(dataset["persentase_sanitasi_layak"].mean())
         )
 
-        gizi = st.number_input(
+        jumlah_tenaga_gizi = st.number_input(
             "Jumlah Tenaga Gizi",
             min_value=0,
-            value=40,
-            step=1
+            value=int(dataset["jumlah_tenaga_gizi"].mean())
         )
 
     st.divider()
 
     if st.button("🔍 Prediksi", use_container_width=True):
 
-        data = pd.DataFrame({
-
-            "persentase_penduduk_miskin": [miskin],
-            "garis_kemiskinan": [garis],
-            "persentase_sanitasi_layak": [sanitasi],
-            "jumlah_tenaga_gizi": [gizi]
-
+        data_input = pd.DataFrame({
+            "persentase_penduduk_miskin": [persentase_penduduk_miskin],
+            "garis_kemiskinan": [garis_kemiskinan],
+            "persentase_sanitasi_layak": [persentase_sanitasi_layak],
+            "jumlah_tenaga_gizi": [jumlah_tenaga_gizi]
         })
 
-        prediksi = model.predict(data)[0]
+        hasil_prediksi = model.predict(data_input)[0]
 
         st.success(
-            f"Prediksi Jumlah Balita Stunting: **{prediksi:,.0f} Balita**"
+            f"Prediksi jumlah balita stunting adalah **{hasil_prediksi:.2f} balita**"
         )
 
         st.subheader("Data Input")
 
         st.dataframe(
-            data,
+            data_input,
             use_container_width=True
         )
 
         st.subheader("Hasil Prediksi")
 
-        hasil_prediksi = pd.DataFrame({
-
-            "Prediksi Jumlah Balita Stunting": [round(prediksi)]
-
+        hasil_df = pd.DataFrame({
+            "Prediksi Jumlah Balita Stunting": [round(hasil_prediksi, 2)]
         })
 
         st.dataframe(
-            hasil_prediksi,
+            hasil_df,
             use_container_width=True
         )
 
-        csv = hasil_prediksi.to_csv(index=False).encode("utf-8")
+        csv = hasil_df.to_csv(index=False).encode("utf-8")
 
         st.download_button(
-            label="⬇ Download Hasil Prediksi",
+            "⬇ Download Hasil Prediksi",
             data=csv,
             file_name="hasil_prediksi.csv",
             mime="text/csv",
             use_container_width=True
         )
-      # ==========================================================
-# EVALUASI
+        # ==========================================================
+# EVALUASI MODEL
 # ==========================================================
 
-elif menu == "📉 Evaluasi":
+elif menu == "📈 Evaluasi":
 
-    st.title("📉 Evaluasi Model Random Forest")
+    st.title("📈 Evaluasi Model Random Forest")
 
-    st.subheader("Hasil Evaluasi")
+    col1, col2 = st.columns(2)
 
-    st.dataframe(
-        evaluasi,
+    with col1:
+
+        st.metric(
+            "MAE",
+            f"{mae:.2f}"
+        )
+
+        st.metric(
+            "RMSE",
+            f"{rmse:.2f}"
+        )
+
+    with col2:
+
+        st.metric(
+            "MSE",
+            f"{mse:.2f}"
+        )
+
+        st.metric(
+            "R² Score",
+            f"{r2:.4f}"
+        )
+
+    st.divider()
+
+    st.subheader("Aktual vs Prediksi")
+
+    hasil = pd.DataFrame({
+
+        "Aktual": y_test.values,
+        "Prediksi": y_pred
+
+    })
+
+    fig = px.scatter(
+        hasil,
+        x="Aktual",
+        y="Prediksi",
+        title="Grafik Aktual vs Prediksi"
+    )
+
+    fig.add_shape(
+        type="line",
+        x0=hasil["Aktual"].min(),
+        y0=hasil["Aktual"].min(),
+        x1=hasil["Aktual"].max(),
+        y1=hasil["Aktual"].max(),
+        line=dict(
+            color="red",
+            dash="dash"
+        )
+    )
+
+    st.plotly_chart(
+        fig,
         use_container_width=True
     )
 
     st.divider()
 
-    if {"Aktual", "Prediksi"}.issubset(hasil.columns):
+    st.subheader("Residual Plot")
 
-        st.subheader("Grafik Aktual vs Prediksi")
+    residual = y_test.values - y_pred
 
-        fig = px.scatter(
-            hasil,
-            x="Aktual",
-            y="Prediksi",
-            title="Aktual vs Prediksi",
-            trendline="ols"
-        )
+    residual_df = pd.DataFrame({
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+        "Prediksi": y_pred,
+        "Residual": residual
 
-    st.divider()
+    })
 
-    if "Residual" in hasil.columns:
+    fig2 = px.scatter(
+        residual_df,
+        x="Prediksi",
+        y="Residual",
+        title="Residual Plot"
+    )
 
-        st.subheader("Residual Plot")
+    fig2.add_hline(
+        y=0,
+        line_dash="dash"
+    )
 
-        fig2 = px.scatter(
-            hasil,
-            x="Prediksi",
-            y="Residual",
-            title="Residual Plot"
-        )
-
-        fig2.add_hline(
-            y=0,
-            line_dash="dash"
-        )
-
-        st.plotly_chart(
-            fig2,
-            use_container_width=True
-        )
-
-    st.divider()
-
-    csv = evaluasi.to_csv(index=False).encode("utf-8")
-
-    st.download_button(
-        "⬇ Download Hasil Evaluasi",
-        data=csv,
-        file_name="hasil_evaluasi.csv",
-        mime="text/csv",
+    st.plotly_chart(
+        fig2,
         use_container_width=True
     )
 
@@ -435,13 +555,10 @@ elif menu == "⭐ Feature Importance":
         use_container_width=True
     )
 
-    kolom_fitur = importance.columns[0]
-    kolom_nilai = importance.columns[1]
-
     fig = px.bar(
         importance,
-        x=kolom_nilai,
-        y=kolom_fitur,
+        x="Importance",
+        y="Fitur",
         orientation="h",
         title="Feature Importance Random Forest"
     )
@@ -460,29 +577,33 @@ elif menu == "ℹ️ Tentang":
     st.title("ℹ️ Tentang Aplikasi")
 
     st.markdown("""
-### Prediksi Jumlah Balita Stunting Provinsi Jawa Barat
+## Prediksi Jumlah Balita Stunting Provinsi Jawa Barat
 
-Aplikasi ini dibuat sebagai implementasi penelitian skripsi menggunakan algoritma **Random Forest Regressor**.
+Aplikasi ini dibuat sebagai implementasi penelitian skripsi
+menggunakan algoritma **Random Forest Regressor**.
 
-### Dataset
-- Data indikator stunting Provinsi Jawa Barat
-- Variabel:
-  - Persentase Penduduk Miskin
-  - Garis Kemiskinan
-  - Persentase Sanitasi Layak
-  - Jumlah Tenaga Gizi
-  - Jumlah Balita Stunting
+### Variabel
+
+- Persentase Penduduk Miskin
+- Garis Kemiskinan
+- Persentase Sanitasi Layak
+- Jumlah Tenaga Gizi
+
+### Target
+
+Jumlah Balita Stunting
 
 ### Algoritma
+
 - Random Forest Regressor
-- Scikit-Learn
 
 ### Tools
-- Python 3.11
+
+- Python
 - Streamlit
-- Pandas
-- Plotly
 - Scikit-Learn
+- Plotly
+- Pandas
 
 ---
 **Universitas Gunadarma**
